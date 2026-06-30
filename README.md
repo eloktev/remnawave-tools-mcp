@@ -34,7 +34,7 @@ Sensitive read results are redacted before returning through this wrapper for us
 ## Install
 
 ```bash
-npm install
+npm ci --include=dev
 npm run build
 ```
 
@@ -56,7 +56,7 @@ REMNAWAVE_TOOLS_ALLOW_MUTATIONS=false
 ## Development
 
 ```bash
-npm install
+npm ci --include=dev
 npm test
 npm run build
 ```
