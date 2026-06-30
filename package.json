@@ -1,0 +1,42 @@
+{
+  "name": "remnawave-tools-mcp",
+  "version": "0.1.0",
+  "description": "Flat, safety-gated MCP tools for Remnawave via remnawave-mcp.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "remnawave-tools-mcp": "./bin/remnawave-tools-mcp"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "SPEC.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eloktev/remnawave-tools-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "remnawave",
+    "xray"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}
