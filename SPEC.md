@@ -72,14 +72,15 @@ Also expose two meta tools:
 
 ## Input Contract
 
-Every flat operation tool accepts:
+Every flat operation tool accepts the generic control fields:
 
 ```json
 {
   "payload": {},
   "responseMode": "normalized",
   "confirmToken": "optional-token-from-upstream",
-  "mutationApproved": false
+  "mutationApproved": false,
+  "confirmPhrase": "optional-operation-confirmation"
 }
 ```
 
@@ -90,6 +91,23 @@ Rules:
 - `responseMode=raw` is passed upstream only when the upstream operation allows it.
 - `confirmToken` is passed through unchanged.
 - `mutationApproved` is only a local safety flag; it is not forwarded upstream.
+- `confirmPhrase` is required only for hard-to-reverse mutations.
+- Priority operations in `nodes`, `users`, `internal_squads`, and `external_squads` should expose typed top-level fields and merge them into the upstream payload.
+- Typed operations should retain `payload` or `data` as escape hatches so upstream-compatible fields are not blocked by an incomplete local schema.
+
+## Operator Tools
+
+Expose convenience tools for common operator workflows while preserving the full
+low-level catalog:
+
+- `remnawave_node_get_config` -> `nodes.get`
+- `remnawave_node_update_config` -> `nodes.update`
+- `remnawave_squad_add_users` -> `internal_squads.add_users` or `external_squads.add_users`
+- `remnawave_user_suspend` -> `users.disable`
+- `remnawave_user_set_squads` -> `users.update`
+
+Operator tools must use the same safety gates, redaction, raw-response rules,
+and upstream forwarding path as the low-level tools.
 
 ## Safety Model
 
@@ -158,6 +176,16 @@ If mutation is blocked locally, return a structured MCP result with:
 ```
 
 This local safety layer is in addition to upstream confirmation/preview gates.
+
+Hard-to-reverse mutations must require an additional exact phrase:
+
+```json
+{
+  "confirmPhrase": "confirm users.delete"
+}
+```
+
+The expected phrase is `confirm <domain>.<operation>`.
 
 ## Required Supported Operations
 
@@ -384,7 +412,9 @@ The wrapper must expose all operations currently discoverable from `remnawave-mc
 - The server should fail closed if upstream discovery fails or Remnawave version gate fails.
 - Tool list should be stable and deterministic.
 - Descriptions should include domain, operation, safety class, and upstream operation summary when available.
-- Input schemas may be generic at first, but `remnawave_describe` must expose upstream schema details.
+- Priority input schemas for `nodes`, `users`, `internal_squads`, and `external_squads` should expose typed fields for common get/list/create/update/enable/disable/restart/add-users operations.
+- Generic `payload` forwarding must remain available for compatibility.
+- `remnawave_describe` must expose upstream schema/details.
 
 ## Test Requirements
 
@@ -393,6 +423,10 @@ Automated tests:
 - Unit test operation classification.
 - Unit test tool-name generation and reverse parsing.
 - Unit test local mutation blocking.
+- Unit test typed schema selection for priority operations.
+- Unit test typed argument normalization into upstream payloads.
+- Unit test dangerous mutation confirmation phrases.
+- Unit test operator tool routing.
 - Unit test child MCP JSON-RPC message handling with a fake upstream process.
 
 Live smoke tests against the real panel, read-only only:
@@ -410,6 +444,7 @@ Safety smoke tests:
 
 - Calling `remnawave_nodes_restart` without `REMNAWAVE_TOOLS_ALLOW_MUTATIONS=true` must return `LOCAL_MUTATION_BLOCKED`.
 - Calling `remnawave_users_delete` without local mutation approval must return `LOCAL_MUTATION_BLOCKED`.
+- Calling a dangerous mutation with mutation execution enabled but without the exact `confirm <domain>.<operation>` phrase must return `DANGEROUS_MUTATION_CONFIRMATION_REQUIRED`.
 
 Do not run live mutating tests.
 
@@ -442,4 +477,6 @@ Keep the Remnawave namespace denied for agents or users that should not inspect 
 - `openclaw mcp probe remnawave` reports many flat tools, not only one upstream tool.
 - Live read-only smoke tests pass.
 - Mutating operation smoke tests prove local safety blocks are active.
+- Priority operations have typed schemas while preserving a generic payload escape hatch.
+- Operator tools are discoverable and route to the intended low-level operations.
 - No secret values appear in logs, README, SPEC, test snapshots, or final chat output.

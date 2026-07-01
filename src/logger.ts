@@ -1,4 +1,4 @@
-const SECRET_PATTERN = /(token|secret|private|key|uuid|subscription|authorization|bearer|shortuuid|short_uuid|url)/i;
+const SECRET_PATTERN = /(token|secret|private|key|uuid|subscription|authorization|bearer|shortuuid|short_uuid|shortid|short_id|url)/i;
 
 export function log(level: "debug" | "info" | "warn" | "error", message: string, meta?: unknown): void {
   const configured = process.env.LOG_LEVEL ?? "warn";

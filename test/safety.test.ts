@@ -33,6 +33,7 @@ test("redacts sensitive MCP text results", () => {
         text: JSON.stringify({
           uuid: "user-uuid",
           shortUuid: "abc123",
+          shortIds: ["deadbeefcafebabe"],
           subscriptionUrl: "https://sub.example/abc123",
           nested: { publicName: "ok", privateKey: "secret-value" },
         }),
@@ -43,5 +44,6 @@ test("redacts sensitive MCP text results", () => {
   assert.match(text, /\[REDACTED\]/);
   assert.doesNotMatch(text, /sub\.example/);
   assert.doesNotMatch(text, /secret-value/);
+  assert.doesNotMatch(text, /deadbeefcafebabe/);
   assert.match(text, /publicName/);
 });

@@ -3,15 +3,17 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { allOperations, CATALOG, classifyOperation, parseToolName, toolNameFor } from "./catalog.js";
 import { log, redactValue } from "./logger.js";
+import {
+  dangerousMutationConfirmed,
+  normalizeOperationInput,
+  operationInputSchema,
+  operatorTarget,
+  operatorTools,
+  operatorToolSpec,
+  type OperatorToolName,
+} from "./schemas.js";
 import { UpstreamClient } from "./upstreamClient.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-
-const operationInputSchema = {
-  payload: z.record(z.unknown()).optional().default({}),
-  responseMode: z.enum(["normalized", "raw"]).optional().default("normalized"),
-  confirmToken: z.string().optional(),
-  mutationApproved: z.boolean().optional().default(false),
-};
 
 export async function runServer(upstream = new UpstreamClient()): Promise<void> {
   await upstream.assertReady();
@@ -28,6 +30,7 @@ export async function runServer(upstream = new UpstreamClient()): Promise<void> 
     async () => jsonResult({
       domains: Object.fromEntries(Object.entries(CATALOG).map(([domain, operations]) => [domain, [...operations].sort()])),
       tools: allOperations(),
+      operatorTools: [...operatorTools],
     }),
   );
 
@@ -54,8 +57,9 @@ export async function runServer(upstream = new UpstreamClient()): Promise<void> 
     server.tool(
       operation.toolName,
       `Remnawave ${operation.domain}.${operation.operation} (${operation.safety}).`,
-      operationInputSchema,
-      async ({ payload, responseMode, confirmToken, mutationApproved }) => {
+      operationInputSchema(operation.domain, operation.operation),
+      async (args) => {
+        const { payload, responseMode, confirmToken, mutationApproved, confirmPhrase } = normalizeOperationInput(args);
         const parsed = parseToolName(operation.toolName);
         if (!parsed) {
           return jsonResult({ error: { code: "TOOL_PARSE_FAILED", kind: "internal", message: "Failed to parse generated tool name.", retryable: false } });
@@ -70,7 +74,17 @@ export async function runServer(upstream = new UpstreamClient()): Promise<void> 
             },
           });
         }
-        if ((responseMode ?? "normalized") === "raw" && !rawAllowed(parsed.domain, parsed.operation)) {
+        if (operation.safety === "mutation" && !dangerousMutationConfirmed(parsed.domain, parsed.operation, confirmPhrase)) {
+          return jsonResult({
+            error: {
+              code: "DANGEROUS_MUTATION_CONFIRMATION_REQUIRED",
+              kind: "safety",
+              message: `This operation requires confirmPhrase=\"confirm ${parsed.domain}.${parsed.operation}\".`,
+              retryable: false,
+            },
+          });
+        }
+        if (responseMode === "raw" && !rawAllowed(parsed.domain, parsed.operation)) {
           return jsonResult({
             error: {
               code: "RAW_RESPONSE_NOT_ALLOWED",
@@ -80,15 +94,56 @@ export async function runServer(upstream = new UpstreamClient()): Promise<void> 
             },
           });
         }
-        const result = await upstream.call(parsed.domain, parsed.operation, payload ?? {}, responseMode ?? "normalized", confirmToken);
+        const result = await upstream.call(parsed.domain, parsed.operation, payload, responseMode, confirmToken);
         return operation.safety === "sensitive-read" ? redactToolResult(result) : result;
       },
     );
   }
 
+  for (const name of operatorTools) {
+    const spec = operatorToolSpec(name);
+    const safety = classifyOperation(spec.domain, spec.operation);
+    server.tool(name, spec.description, spec.inputSchema, async (args) => {
+      const { responseMode, confirmToken, mutationApproved, confirmPhrase } = normalizeOperationInput(args);
+      const target = operatorTarget(name as OperatorToolName, args);
+      if (safety === "mutation" && !mutationAllowed(mutationApproved)) {
+        return jsonResult({
+          error: {
+            code: "LOCAL_MUTATION_BLOCKED",
+            kind: "safety",
+            message: "This Remnawave operation is mutating and local mutation execution is disabled.",
+            retryable: false,
+          },
+        });
+      }
+      if (safety === "mutation" && !dangerousMutationConfirmed(target.domain, target.operation, confirmPhrase)) {
+        return jsonResult({
+          error: {
+            code: "DANGEROUS_MUTATION_CONFIRMATION_REQUIRED",
+            kind: "safety",
+            message: `This operation requires confirmPhrase=\"confirm ${target.domain}.${target.operation}\".`,
+            retryable: false,
+          },
+        });
+      }
+      if (responseMode === "raw" && !rawAllowed(target.domain, target.operation)) {
+        return jsonResult({
+          error: {
+            code: "RAW_RESPONSE_NOT_ALLOWED",
+            kind: "validation",
+            message: "Raw response mode is not allowed for this Remnawave operation.",
+            retryable: false,
+          },
+        });
+      }
+      const result = await upstream.call(target.domain, target.operation, target.payload, responseMode, confirmToken);
+      return safety === "sensitive-read" ? redactToolResult(result) : result;
+    });
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  log("info", "remnawave-tools MCP server started", { tools: allOperations().length + 2 });
+  log("info", "remnawave-tools MCP server started", { tools: allOperations().length + operatorTools.length + 2 });
 }
 
 function mutationAllowed(mutationApproved?: boolean): boolean {

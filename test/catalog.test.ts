@@ -9,6 +9,12 @@ test("classifies representative operations", () => {
   assert.equal(classifyOperation("users", "list"), "sensitive-read");
   assert.equal(classifyOperation("users", "list_tags"), "read");
   assert.equal(classifyOperation("subscriptions", "get_raw_by_short_uuid"), "sensitive-read");
+  assert.equal(classifyOperation("nodes", "list"), "sensitive-read");
+  assert.equal(classifyOperation("nodes", "get"), "sensitive-read");
+  assert.equal(classifyOperation("profiles", "list"), "sensitive-read");
+  assert.equal(classifyOperation("profiles", "update"), "mutation");
+  assert.equal(classifyOperation("profiles", "delete"), "mutation");
+  assert.equal(classifyOperation("hosts", "get"), "sensitive-read");
   assert.equal(classifyOperation("nodes", "restart"), "mutation");
   assert.equal(classifyOperation("hwid", "create_device"), "mutation");
   assert.equal(classifyOperation("bandwidth_stats", "get_user_usage"), "read");

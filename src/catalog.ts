@@ -188,6 +188,9 @@ export function classifyOperation(domain: string, operation: string): OperationS
   }
 
   const sensitiveReadHints = [
+    domain === "nodes" && ["get", "list"].includes(operation),
+    domain === "profiles" && ["get", "get_computed", "list", "list_all_inbounds", "list_inbounds"].includes(operation),
+    domain === "hosts" && ["get", "list"].includes(operation),
     domain === "users" && operation !== "list_tags",
     domain === "subscriptions",
     domain === "public_subscriptions",
